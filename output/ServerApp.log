@@ -1,0 +1,56 @@
+-MacBook-Pro:Go-Back-N chetan$ python ServerApp.py 
+2017-03-23 16:50:58,858 RECEIVER [INFO] Creating UDP socket 127.0.0.1:8080 for communication with the client
+2017-03-23 16:50:58,858 RECEIVER [INFO] Started to receive packets transmitted from sender
+2017-03-23 16:50:58,858 RECEIVER [INFO] Writing payload data to '/My Computer/Academic/GitHub/Go-Back-N/data/receiver/index.html'
+2017-03-23 16:50:58,859 RECEIVER [INFO] Creating a thread to monitor packet receipt
+2017-03-23 16:50:58,859 RECEIVER [INFO] Starting thread execution
+2017-03-23 16:50:58,859 RECEIVER [INFO] Started to monitor packet receipt
+2017-03-23 16:51:06,308 RECEIVER [INFO] Received packet with sequence number: 0
+2017-03-23 16:51:06,309 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 1
+2017-03-23 16:51:06,343 RECEIVER [WARNING] Received corrupt packet!!
+2017-03-23 16:51:06,343 RECEIVER [WARNING] Discarding packet with sequence number: 1
+2017-03-23 16:51:06,344 RECEIVER [WARNING] Received out of order packet!!
+2017-03-23 16:51:06,344 RECEIVER [WARNING] Discarding packet with sequence number: 2
+2017-03-23 16:51:06,344 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 1
+2017-03-23 16:51:06,345 RECEIVER [WARNING] Received out of order packet!!
+2017-03-23 16:51:06,345 RECEIVER [WARNING] Discarding packet with sequence number: 3
+2017-03-23 16:51:06,345 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 1
+2017-03-23 16:51:16,399 RECEIVER [INFO] Received packet with sequence number: 1
+2017-03-23 16:51:16,399 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 2
+2017-03-23 16:51:16,411 RECEIVER [WARNING] Received corrupt packet!!
+2017-03-23 16:51:16,411 RECEIVER [WARNING] Discarding packet with sequence number: 2
+2017-03-23 16:51:16,413 RECEIVER [WARNING] Received out of order packet!!
+2017-03-23 16:51:16,413 RECEIVER [WARNING] Discarding packet with sequence number: 3
+2017-03-23 16:51:16,414 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 2
+2017-03-23 16:51:16,415 RECEIVER [WARNING] Received out of order packet!!
+2017-03-23 16:51:16,415 RECEIVER [WARNING] Discarding packet with sequence number: 4
+2017-03-23 16:51:16,415 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 2
+2017-03-23 16:51:26,500 RECEIVER [INFO] Received packet with sequence number: 2
+2017-03-23 16:51:26,501 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 3
+2017-03-23 16:51:26,502 RECEIVER [WARNING] Received corrupt packet!!
+2017-03-23 16:51:26,502 RECEIVER [WARNING] Discarding packet with sequence number: 3
+2017-03-23 16:51:26,503 RECEIVER [WARNING] Received out of order packet!!
+2017-03-23 16:51:26,503 RECEIVER [WARNING] Discarding packet with sequence number: 4
+2017-03-23 16:51:26,504 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 3
+2017-03-23 16:51:26,504 RECEIVER [WARNING] Received corrupt packet!!
+2017-03-23 16:51:26,504 RECEIVER [WARNING] Discarding packet with sequence number: 5
+2017-03-23 16:51:36,540 RECEIVER [INFO] Received packet with sequence number: 3
+2017-03-23 16:51:36,540 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 4
+2017-03-23 16:51:36,545 RECEIVER [INFO] Received packet with sequence number: 4
+2017-03-23 16:51:36,545 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 5
+2017-03-23 16:51:36,546 RECEIVER [ERROR] Simulating artificial packet loss!!
+2017-03-23 16:51:36,546 RECEIVER [ERROR] Lost a packet with sequence number: 5
+2017-03-23 16:51:36,547 RECEIVER [WARNING] Received out of order packet!!
+2017-03-23 16:51:36,547 RECEIVER [WARNING] Discarding packet with sequence number: 6
+2017-03-23 16:51:36,547 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 5
+2017-03-23 16:51:36,556 RECEIVER [WARNING] Received corrupt packet!!
+2017-03-23 16:51:36,556 RECEIVER [WARNING] Discarding packet with sequence number: 7
+2017-03-23 16:51:46,600 RECEIVER [INFO] Received packet with sequence number: 5
+2017-03-23 16:51:46,600 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 6
+2017-03-23 16:51:46,601 RECEIVER [INFO] Received packet with sequence number: 6
+2017-03-23 16:51:46,601 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 7
+2017-03-23 16:51:46,602 RECEIVER [INFO] Received packet with sequence number: 7
+2017-03-23 16:51:46,602 RECEIVER [INFO] Transmitting an acknowledgement with ack number: 8
+2017-03-23 16:52:46,622 RECEIVER [WARNING] Timeout!!
+2017-03-23 16:52:46,622 RECEIVER [INFO] Gracefully terminating the receiver process, as client stopped transmission!!
+Chetans-MacBook-Pro:Go-Back-N chetan$ 
