@@ -12,6 +12,7 @@
 """
 
 import os
+import math
 import logging
 import random
 import socket
@@ -44,9 +45,11 @@ class Receiver(object):
     def __init__(self,
                  receiverIP="127.0.0.1",
                  receiverPort=8080,
+                 sequenceNumberBits=2,
                  www=os.path.join(os.getcwd(), "data", "receiver")):
         self.receiverIP = receiverIP
         self.receiverPort = receiverPort
+        self.sequenceNumberBits = sequenceNumberBits
         self.www = www
 
     def open(self):
@@ -89,7 +92,7 @@ class Receiver(object):
                               % filename)
 
         # Create an object of 'Window', which handles packet receipt
-        window = Window()
+        window = Window(self.sequenceNumberBits)
 
         # Create a thread named 'PacketHandler' to monitor packet receipt
         log.info("Creating a thread to monitor packet receipt")
@@ -138,15 +141,25 @@ class Window(object):
     Class for assisting packet receipt.
     """
 
-    def __init__(self):
+    def __init__(self, sequenceNumberBits):
         self.expectedPkt = 0
-        self.maxSize = 1
+        self.maxSequenceSpace = int(math.pow(2, sequenceNumberBits))
+        self.maxWindowSize = 1
+        self.isPacketReceipt = False
 
     def expectedPacket(self):
         return self.expectedPkt
 
     def slide(self):
         self.expectedPkt += 1
+        if self.expectedPkt >= self.maxSequenceSpace:
+            self.expectedPkt %= self.maxSequenceSpace
+
+    def receipt(self):
+        return self.isPacketReceipt
+
+    def start_receipt(self):
+        self.isPacketReceipt = True
 
 
 class PacketHandler(Thread):
@@ -155,6 +168,7 @@ class PacketHandler(Thread):
     """
 
     PACKET = namedtuple("Packet", ["SequenceNumber", "Checksum", "Data"])
+    ACK = namedtuple("ACK", ["AckNumber", "Checksum"])
 
     def __init__(self,
                  fileHandle,
@@ -196,7 +210,7 @@ class PacketHandler(Thread):
             # If no packet is received within timeout;
             if not ready[0]:
                 # Wait, if no packets are yet transmitted by sender
-                if self.window.expectedPacket() == 0:
+                if not self.window.receipt():
                     continue
                 # Stop receiving packets from sender,
                 # if there are more than 5 consecutive timeouts
@@ -210,6 +224,8 @@ class PacketHandler(Thread):
                         continue
             else:
                 chance = 0
+                if not self.window.receipt():
+                    self.window.start_receipt()
 
             # Receive packet
             try:
@@ -238,8 +254,8 @@ class PacketHandler(Thread):
 
                 # Reliable acknowledgement transfer
                 log.info("Transmitting an acknowledgement with ack number: %d",
-                         self.window.expectedPacket())
-                self.rdt_send()
+                         self.window.expectedPacket()-1)
+                self.rdt_send(self.window.expectedPacket()-1)
 
                 continue
 
@@ -260,8 +276,8 @@ class PacketHandler(Thread):
 
             # Reliable acknowledgement transfer
             log.info("Transmitting an acknowledgement with ack number: %d",
-                     self.window.expectedPacket())
-            self.rdt_send()
+                     receivedPacket.SequenceNumber)
+            self.rdt_send(receivedPacket.SequenceNumber)
 
     def parse(self, receivedPacket):
         """
@@ -314,6 +330,48 @@ class PacketHandler(Thread):
         sum = sum + data16
         return (sum & 0xffff) + (sum >> 16)
 
+    def rdt_send(self, ackNumber):
+        """
+        Reliable acknowledgement transfer.
+        """
+        ack = PacketHandler.ACK(AckNumber=ackNumber,
+                                Checksum=self.get_hashcode(ackNumber))
+
+        # Create a raw acknowledgement
+        rawAck = self.make_pkt(ack)
+
+        # Transmit an acknowledgement using underlying UDP protocol
+        self.udt_send(rawAck)
+
+    def get_hashcode(self, data):
+        """
+        Compute the hash code.
+        """
+        hashcode = hashlib.md5()
+        hashcode.update(str(data))
+        return hashcode.digest()
+
+    def make_pkt(self, ack):
+        """
+        Create a raw acknowledgement.
+        """
+        ackNumber = struct.pack('=I', ack.AckNumber)
+        checksum = struct.pack('=16s', ack.Checksum)
+        rawAck = ackNumber + checksum
+        return rawAck
+
+    def udt_send(self, ack):
+        """
+        Transmit an acknowledgement using underlying UDP protocol.
+        """
+        try:
+            self.receiverSocket.sendto(ack, (self.senderIP, self.senderPort))
+        except Exception as e:
+            log.error("Could not send UDP packet!")
+            log.debug(e)
+            raise SocketError("Sending UDP packet to %s:%d failed!"
+                              % (self.senderIP, self.senderPort))
+
     def simulate_packet_loss(self):
         """
         Simulate artificial packet loss.
@@ -335,42 +393,3 @@ class PacketHandler(Thread):
             log.error("Could not write to file handle!")
             log.debug(e)
             raise FileIOError("Writing to file handle failed!")
-
-    def rdt_send(self):
-        """
-        Reliable acknowledgement transfer.
-        """
-        # Create a raw acknowledgement
-        rawAck = self.make_pkt()
-
-        # Transmit an acknowledgement using underlying UDP protocol
-        self.udt_send(rawAck)
-
-    def make_pkt(self):
-        """
-        Create a raw acknowledgement.
-        """
-        ackNumber = struct.pack('=I', self.window.expectedPacket())
-        checksum = struct.pack('=16s', self.get_ack_hashcode())
-        rawAck = ackNumber + checksum
-        return rawAck
-
-    def get_ack_hashcode(self):
-        """
-        Compute the hash code for acknowledgement to be transmitted.
-        """
-        hashcode = hashlib.md5()
-        hashcode.update(str(self.window.expectedPacket()))
-        return hashcode.digest()
-
-    def udt_send(self, ack):
-        """
-        Transmit an acknowledgement using underlying UDP protocol.
-        """
-        try:
-            self.receiverSocket.sendto(ack, (self.senderIP, self.senderPort))
-        except Exception as e:
-            log.error("Could not send UDP packet!")
-            log.debug(e)
-            raise SocketError("Sending UDP packet to %s:%d failed!"
-                              % (self.senderIP, self.senderPort))

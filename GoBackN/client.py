@@ -20,6 +20,7 @@ import struct
 import select
 import hashlib
 from collections import namedtuple
+from collections import OrderedDict
 from threading import Thread
 from threading import Lock
 
@@ -42,6 +43,10 @@ class FileNotExistError(Exception):
     pass
 
 
+class WindowSizeError(Exception):
+    pass
+
+
 class Sender(object):
     """
     Sender running Go-Back-N protocol for reliable data transfer.
@@ -51,11 +56,13 @@ class Sender(object):
                  senderIP="127.0.0.1",
                  senderPort=8081,
                  sequenceNumberBits=2,
+                 windowSize=None,
                  maxSegmentSize=1500,
                  www=os.path.join(os.getcwd(), "data", "sender")):
         self.senderIP = senderIP
         self.senderPort = senderPort
         self.sequenceNumberBits = sequenceNumberBits
+        self.windowSize = windowSize
         self.maxSegmentSize = maxSegmentSize
         self.www = www
 
@@ -95,7 +102,8 @@ class Sender(object):
                                     % filename)
 
         # Create an object of 'Window', which handles packet transmission
-        window = Window(self.sequenceNumberBits)
+        window = Window(self.sequenceNumberBits,
+                        self.windowSize)
 
         # Create a thread named 'PacketHandler' to monitor packet transmission
         log.info("Creating a thread to monitor packet transmission")
@@ -147,45 +155,84 @@ class Window(object):
     Class for assisting packet transmission.
     """
 
-    def __init__(self, sequenceNumberBits):
+    def __init__(self, sequenceNumberBits, windowSize=None):
         self.expectedAck = 0
         self.nextSequenceNumber = 0
-        self.maxSize = math.pow(2, sequenceNumberBits) - 1
+        self.nextPkt = 0
+        self.maxSequenceSpace = int(math.pow(2, sequenceNumberBits))
+        if windowSize is None:
+            self.maxWindowSize = int(math.pow(2, sequenceNumberBits)) - 1
+        else:
+            if windowSize > (int(math.pow(2, sequenceNumberBits)) - 1):
+                raise WindowSizeError("Invalid window size!!")
+            else:
+                self.maxWindowSize = windowSize
+        self.transmissionWindow = OrderedDict()
         self.isPacketTransmission = True
-
-    def SetExpectedAck(self, expectedAck):
-        with LOCK:
-            self.expectedAck = expectedAck
-
-    def SetNextSequenceNumber(self, nextSequenceNumber):
-        with LOCK:
-            self.nextSequenceNumber = nextSequenceNumber
 
     def expectedACK(self):
         return self.expectedAck
 
+    def retransmit(self, nextSequenceNumber):
+        with LOCK:
+            self.nextSequenceNumber = nextSequenceNumber
+
+            self.nextPkt -= len(self.transmissionWindow)
+
+            for k, v in self.transmissionWindow.items():
+                del self.transmissionWindow[k]
+
+    def maxSequenceNumber(self):
+        return self.maxSequenceSpace
+
     def empty(self):
-        if self.nextSequenceNumber == self.expectedAck:
+        if len(self.transmissionWindow) == 0:
             return True
         return False
 
     def full(self):
-        if self.nextSequenceNumber >= (self. expectedAck + self.maxSize):
+        if len(self.transmissionWindow) >= self.maxWindowSize:
+            return True
+        return False
+
+    def exist(self, key):
+        if key in self.transmissionWindow:
             return True
         return False
 
     def next(self):
-        return self.nextSequenceNumber
+        return self.nextPkt
 
-    def consume(self):
+    def consume(self, key):
         with LOCK:
-            self.nextSequenceNumber += 1
+            self.transmissionWindow[key] = False
 
-    def stop(self):
+            self.nextSequenceNumber += 1
+            if self.nextSequenceNumber >= self.maxSequenceSpace:
+                self.nextSequenceNumber %= self.maxSequenceSpace
+
+            self.nextPkt += 1
+
+    def mark_acked(self, key):
+        with LOCK:
+            self.transmissionWindow[key] = True
+
+            for k, v in self.transmissionWindow.items():
+                del self.transmissionWindow[k]
+
+                if k == key:
+                    break
+
+            if len(self.transmissionWindow) == 0:
+                self.expectedAck = self.nextSequenceNumber
+            else:
+                self.expectedAck = self.transmissionWindow.items()[0][0]
+
+    def stop_transmission(self):
         with LOCK:
             self.isPacketTransmission = False
 
-    def isTransmission(self):
+    def transmit(self):
         return self.isPacketTransmission
 
 
@@ -237,16 +284,19 @@ class PacketHandler(Thread):
         # Monitor sender
         # untill all packets are successfully transmitted and acked
         log.info("[%s] Starting packet transmission", self.threadName)
-        while self.window.expectedACK() < self.totalPackets:
+        while (not self.window.empty() or
+                self.window.next() < self.totalPackets):
             # If window is full, then don't transmit a new packet
             if self.window.full():
                 pass
             # If window is not full, but all packets are already transmitted;
             # then stop packet transmission
-            elif self.window.next() >= self.totalPackets:
+            elif (not self.window.full() and
+                    self.window.next() >= self.totalPackets):
                 pass
             # Transmit a new packet using underlying UDP protocol
             else:
+                # Receive packet from Application Layer
                 packet = packets[self.window.next()]
 
                 # Simulate artificial bit error
@@ -264,7 +314,7 @@ class PacketHandler(Thread):
 
         # Stop packet transmission
         log.info("[%s] Stopping packet transmission", self.threadName)
-        self.window.stop()
+        self.window.stop_transmission()
 
     def generate_packets(self):
         """
@@ -284,8 +334,11 @@ class PacketHandler(Thread):
                 if not data:
                     break
 
+                # Set sequence number for a packet to be transmitted
+                sequenceNumber = i % self.window.maxSequenceNumber()
+
                 # Create a packet with required header fields and payload
-                pkt = PacketHandler.PACKET(SequenceNumber=self.window.next()+i,
+                pkt = PacketHandler.PACKET(SequenceNumber=sequenceNumber,
                                            Checksum=self.checksum(data),
                                            Data=data)
 
@@ -365,13 +418,13 @@ class PacketHandler(Thread):
         Reliable data transfer.
         """
         # Create a raw packet
-        packet = self.make_pkt(packet)
+        rawPacket = self.make_pkt(packet)
 
         # Transmit a packet using UDP protocol
-        self.udt_send(packet)
+        self.udt_send(rawPacket)
 
-        # Increament sequence number by 1
-        self.window.consume()
+        # Slide transmission window by 1
+        self.window.consume(packet.SequenceNumber)
 
     def make_pkt(self, packet):
         """
@@ -431,7 +484,7 @@ class ACKHandler(Thread):
         """
         # Monitor sender
         # untill all packets are successfully transmitted and acked
-        while self.window.isTransmission():
+        while self.window.transmit():
             # Wait, if all the packets transmitted are acked and
             # there are packets that are yet to be transmitted
             if self.window.empty():
@@ -447,7 +500,7 @@ class ACKHandler(Thread):
             if not ready[0]:
                 log.warning("[%s] Timeout!! Retransmitting packets starting from sequence number: %d",
                             self.threadName, self.window.expectedACK())
-                self.window.SetNextSequenceNumber(self.window.expectedACK())
+                self.window.retransmit(self.window.expectedACK())
                 continue
 
             # Receive acknowledgement
@@ -476,8 +529,7 @@ class ACKHandler(Thread):
 
             # If the received acknowledgement has acknowledgement number
             # beyond expected range, then discard the received acknowledgement
-            if ((receivedAck.AckNumber-1) < self.window.expectedACK() or
-                    (receivedAck.AckNumber-1) >= self.window.next()):
+            if not self.window.exist(receivedAck.AckNumber):
                 log.warning("[%s] Received acknowledgement outside transmission window!!",
                             self.threadName)
                 log.warning("[%s] Discarding acknowledgement with ack number: %d",
@@ -495,7 +547,7 @@ class ACKHandler(Thread):
             # Set next expected acknowledgement
             log.info("[%s] Received acknowledgement with ack number: %d",
                      self.threadName, receivedAck.AckNumber)
-            self.window.SetExpectedAck(receivedAck.AckNumber)
+            self.window.mark_acked(receivedAck.AckNumber)
 
     def parse(self, receivedAck):
         """
